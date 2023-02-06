@@ -1,0 +1,7 @@
+natsort
+imageio
+matplotlib
+cupy-cuda111
+opencv-python==4.5.5.64
+tensorboardX
+gdown

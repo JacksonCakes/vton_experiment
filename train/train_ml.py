@@ -174,7 +174,8 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         if num_all == 0:
             num_all = 1
     
-
+        t_feature = 0
+        s_feature = 0
         for num in range(5):
             cur_person_clothes = F.interpolate(person_clothes, scale_factor=0.5 ** (4 - num), mode='bilinear')
             cur_person_clothes_edge = F.interpolate(person_clothes_edge, scale_factor=0.5 ** (4 - num), mode='bilinear')
@@ -204,7 +205,7 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
             
             weight_all = weight.reshape(-1, 1, 1, 1).repeat(1, 256, h1, w1)
             cond_sup_loss = ((cond_all[num].detach() - cond_all_stud[num]) ** 2 * weight_all).sum() / (256 * h1 * w1 * num_all)
-         
+
             loss_stud = loss_stud + (num + 1) * loss_l1_stud + (num + 1) * 0.2 * loss_vgg_stud + (
                         num + 1) * 2 * loss_edge_stud + (num + 1) * 6 * loss_second_smooth_stud + cond_sup_loss
 
@@ -218,8 +219,12 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
                 # print('Flow loss-{}: {}'.format(num,flow_loss_stud))
 
         loss_all = 0.01 * loss_smooth_total + loss_tea + loss_stud
-
+        t_feature = cond_all.detach().sum()
+        s_feature = cond_all.detach().sum()
         if opt.local_rank == 0:
+            writer.add_scalar("t_feature",t_feature,step)
+            writer.add_scalar("s_feature",s_feature,step)
+            writer.add_scalar("feature_loss",cond_sup_loss/num_all,step)
             writer.add_scalar('loss_all', loss_all, step)
 
         optimizer_warp_tea.zero_grad(set_to_none=True)
@@ -270,7 +275,8 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
             if opt.local_rank == 0:
                 end_time = time.time()
                 elapsed_time = end_time - start_time
-                print('{}:{}:[step-{}]--[loss total-{:.6f}]--[loss teacher-{}]--[loss_student-{}]--[ETA-{}]'.format(now, epoch_iter,step, loss_all,loss_tea,loss_stud,eta))
+                print(f"num_all-{num_all}-t_feature: {t_feature} - s_feature: {s_feature}")
+                print('{}:{}:[step-{}]--[loss total-{:.4f}]--[loss teacher-{}]--[loss_student-{}]--[ETA-{}]'.format(now, epoch_iter,step, loss_all,loss_tea,loss_stud,eta))
 
         if epoch_iter >= dataset_size:
             break
