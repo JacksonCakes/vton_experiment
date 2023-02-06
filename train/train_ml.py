@@ -219,8 +219,8 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
                 # print('Flow loss-{}: {}'.format(num,flow_loss_stud))
 
         loss_all = 0.01 * loss_smooth_total + loss_tea + loss_stud
-        t_feature = cond_all.detach().sum()
-        s_feature = cond_all.detach().sum()
+        t_feature = cond_all[4].sum()
+        s_feature = cond_all_stud[4].sum()
         if opt.local_rank == 0:
             writer.add_scalar("t_feature",t_feature,step)
             writer.add_scalar("s_feature",s_feature,step)

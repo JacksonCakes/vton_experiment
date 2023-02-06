@@ -2,5 +2,5 @@
 .tmp.driveupload
 test/
 /train/scripts/
-
-
+/train/runs/
+/train/models/__pycache__/

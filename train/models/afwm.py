@@ -363,43 +363,9 @@ class RefinePyramid(nn.Module):
 
         return tuple(reversed(feature_list))
 
-class SelfAttention(nn.Module):
-    def __init__(self, in_channels):
-        super(SelfAttention, self).__init__()
-        self.query = nn.Conv2d(in_channels, in_channels // 8, kernel_size=1)
-        self.key = nn.Conv2d(in_channels, in_channels // 8, kernel_size=1)
-        self.value = nn.Conv2d(in_channels, in_channels, kernel_size=1)
-        self.gamma = nn.Parameter(torch.zeros(1))
-
-    def forward(self, x):
-        B, C, H, W = x.size()
-        query = self.query(x).view(B, -1, H*W) # (B, C//8, H*W)
-        key = self.key(x).view(B, -1, H*W) # (B, C//8, H*W)
-        value = self.value(x).view(B, -1, H*W) # (B, C, H*W)
-
-        attn = torch.bmm(query.permute(0, 2, 1), key) # (B, H*W, H*W)
-        attn = attn / (C // 8) ** 0.5 # scaling factor
-        attn = torch.softmax(attn, dim=-1)
-        out = torch.bmm(value, attn.permute(0, 2, 1)) # (B, C, H*W)
-        out = out.view(B, C, H, W)
-        out = self.gamma * out + x
-        return out
-
-class SelfAttentionNetwork(nn.Module):
-    def __init__(self, in_channels):
-        super(SelfAttentionNetwork, self).__init__()
-        self.self_attention = SelfAttention(in_channels)
-    def forward(self,x):
-        B, C, H, W = x.size()
-        x1,x2 = x.split([C // 2, C // 2],dim=1)
-        x1 = self.self_attention(x1)
-        x2 = self.self_attention(x2)
-        out = torch.cat([x1,x2],dim=1)
-        return out
-
 
 class AFlowNet(nn.Module):
-    def __init__(self, num_pyramid, fpn_dim=256, k=4):
+    def __init__(self, num_pyramid, fpn_dim=256):
         super(AFlowNet, self).__init__()
 
         padding_type='zero'
@@ -414,6 +380,7 @@ class AFlowNet(nn.Module):
         self.netF = []
 
         for i in range(num_pyramid):
+
             netRefine_layer = torch.nn.Sequential(
                 torch.nn.Conv2d(2 * fpn_dim, out_channels=128, kernel_size=3, stride=1, padding=1),
                 torch.nn.LeakyReLU(inplace=False, negative_slope=0.1),
@@ -421,7 +388,7 @@ class AFlowNet(nn.Module):
                 torch.nn.LeakyReLU(inplace=False, negative_slope=0.1),
                 torch.nn.Conv2d(in_channels=64, out_channels=32, kernel_size=3, stride=1, padding=1),
                 torch.nn.LeakyReLU(inplace=False, negative_slope=0.1),
-                torch.nn.Conv2d(in_channels=32,  out_channels=2*k+2*k,  kernel_size=3, stride=1, padding=1)
+                torch.nn.Conv2d(in_channels=32, out_channels=2, kernel_size=3, stride=1, padding=1)
             )
 
             style_block = StyledConvBlock(256, 49, latent_dim=256,
@@ -429,11 +396,10 @@ class AFlowNet(nn.Module):
                                          normalize_affine_output=normalize_mlp,
                                          modulated_conv=modulated_conv)
 
-            style_F_block = Styled_F_ConvBlock(49,2*k, latent_dim=256,
+            style_F_block = Styled_F_ConvBlock(49, 2, latent_dim=256,
                                               padding=padding_type, actvn=actvn,
                                               normalize_affine_output=normalize_mlp,
                                               modulated_conv=modulated_conv)
-
 
             self.netRefine.append(netRefine_layer)
             self.netStyle.append(style_block)
@@ -448,7 +414,7 @@ class AFlowNet(nn.Module):
         self.image_style = torch.nn.Sequential(torch.nn.Conv2d(256, 128, kernel_size=(8,6), stride=1, padding=0), torch.nn.LeakyReLU(inplace=False, negative_slope=0.1))
 
 
-    def forward(self, x, x_edge, x_warps, x_conds, warp_feature=True,k=4):
+    def forward(self, x, x_edge, x_warps, x_conds, warp_feature=True):
         last_flow = None
         last_flow_all = []
         delta_list = []
@@ -509,17 +475,7 @@ class AFlowNet(nn.Module):
               last_flow = flow
               x_warp = F.grid_sample(x_warp, flow.permute(0, 2, 3, 1),mode='bilinear', padding_mode='border')
               concat = torch.cat([x_warp,x_cond],1)
-              flow_and_maps = self.netRefine[i](concat)
-              flow_map = flow_and_maps[:,:self.k*2,:,:]
-              k_att = F.softmax(flow_and_maps[:,self.k*2:,:,:])
-              # Get the index of the flow map with the highest probability for each position
-              attention_map_max_idx = k_att.argmax(dim=-1)
-
-              # Create a list of K flow maps
-              flows = [flow_map[i] for i in range(k)]
-
-              # Use the attention map index to select the corresponding flow map
-              flow = torch.stack([flows[idx] for idx in attention_map_max_idx], dim=0)
+              flow = self.netRefine[i](concat)
               delta_list.append(flow)
               flow = apply_offset(flow)
               flow = F.grid_sample(last_flow, flow, mode='bilinear', padding_mode='border')
@@ -584,4 +540,3 @@ class AFWM(nn.Module):
         if opt.verbose:
             print('update learning rate: %f -> %f' % (self.old_lr_warp, lr))
         self.old_lr_warp = lr
-
