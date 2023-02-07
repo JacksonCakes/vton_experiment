@@ -73,7 +73,7 @@ start_epoch, epoch_iter = 1, 0
 train_data = CreateDataset(opt)
 train_sampler = DistributedSampler(train_data)
 train_loader = DataLoader(train_data, batch_size=opt.batchSize, shuffle=False,
-                          num_workers=4, pin_memory=True, sampler=train_sampler)
+                          num_workers=opt.num_workers, pin_memory=True, sampler=train_sampler)
 dataset_size = len(train_loader)
 
 PBTN = AFWM(opt, 3)
@@ -82,12 +82,14 @@ PFSN = AFWM(opt, 3)
 PBTN.train()
 PBTN.cuda()
 PBTN = torch.nn.SyncBatchNorm.convert_sync_batchnorm(PBTN).to(device)
-#load_checkpoint_parallel(PBTN, opt.PBTN_checkpoint)
+if opt.load_pretrain:
+    load_checkpoint_parallel(PBTN, opt.PBTN_checkpoint)
 
 PFSN.train()
 PFSN.cuda()
 PFSN = torch.nn.SyncBatchNorm.convert_sync_batchnorm(PFSN).to(device)
-#load_checkpoint_parallel(PFSN, opt.PFSN_checkpoint)
+if opt.load_pretrain:
+    load_checkpoint_parallel(PFSN, opt.PFSN_checkpoint)
 
 gen_model = ResUnetGenerator(7, 4, 5, ngf=64, norm_layer=nn.BatchNorm2d)
 gen_model.eval()
@@ -236,7 +238,7 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
 
         path = opt.name
         os.makedirs(path, exist_ok=True)
-        if step % 1000 == 0:
+        if step % 300 == 0:
             if opt.local_rank == 0:
                 a = real_image.float().cuda()
                 b = person_clothes.cuda()  # GT
