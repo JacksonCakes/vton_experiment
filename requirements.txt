@@ -2,6 +2,6 @@ natsort
 imageio
 matplotlib
 cupy-cuda111
-opencv-python==4.5.5.64
+opencv-python
 tensorboardX
 gdown
